@@ -1,15 +1,16 @@
-// import AppError from '../errors/AppError';
-import { getCustomRepository } from 'typeorm';
+import { getCustomRepository, getRepository } from 'typeorm';
+import AppError from '../errors/AppError';
 
 import Transaction from '../models/Transaction';
 import TransactionRepository from '../repositories/TransactionsRepository';
-import CategoriesRepository from '../repositories/CategoriesRepository';
+import Category from '../models/Category';
 
 interface Request {
   titleTransaction: string;
   value: number;
   type: 'income' | 'outcome';
   category: string;
+  fileName?: string;
 }
 
 class CreateTransactionService {
@@ -18,49 +19,65 @@ class CreateTransactionService {
     value,
     type,
     category,
+    fileName,
   }: Request): Promise<Transaction> {
     const transactionsRepository = getCustomRepository(TransactionRepository);
-    const categoryRepository = getCustomRepository(CategoriesRepository);
+    const categoryRepository = getRepository(Category);
 
     if (type !== 'income' && type !== 'outcome') {
-      throw Error('Invalid type. Only "income" or "outcome" are allowed');
+      throw new AppError(
+        'Invalid type. Only "income" or "outcome" are allowed',
+      );
     }
 
     const { total } = await transactionsRepository.getBalance();
     if (type === 'outcome' && total < value) {
-      throw Error('insufficient funds');
+      throw new AppError('insufficient funds');
     }
 
     const checkCategoryExists = await categoryRepository.findOne({
-      where: { title: category },
+      title: category,
     });
 
     if (checkCategoryExists) {
-      const categoryTransaction_id = checkCategoryExists.id;
+      try {
+        const transaction = transactionsRepository.create({
+          title: titleTransaction,
+          value: Number(value),
+          type,
+          category: checkCategoryExists,
+          filename: fileName,
+        });
+
+        const createdTransaction = await transactionsRepository.save(
+          transaction,
+        );
+        return createdTransaction;
+      } catch (err) {
+        throw new AppError(err);
+      }
+    }
+
+    try {
+      const newCategory = categoryRepository.create({
+        title: category,
+      });
+
+      await categoryRepository.save(newCategory);
 
       const transaction = transactionsRepository.create({
         title: titleTransaction,
         value: Number(value),
         type,
-        category_id: categoryTransaction_id,
+        category: newCategory,
+        filename: fileName,
       });
 
-      return transactionsRepository.save(transaction);
+      const createdTransaction = await transactionsRepository.save(transaction);
+      return createdTransaction;
+    } catch (err) {
+      throw new AppError(err);
     }
-    const newCategory = categoryRepository.create({
-      title: category,
-    });
-
-    const idNewCategory = await categoryRepository.save(newCategory);
-
-    const transaction = transactionsRepository.create({
-      title: titleTransaction,
-      value: Number(value),
-      type,
-      category_id: idNewCategory.id,
-    });
-
-    return transactionsRepository.save(transaction);
   }
 }
 

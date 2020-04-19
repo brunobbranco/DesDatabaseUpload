@@ -22,9 +22,11 @@ class Transaction {
   @Column('integer')
   value: number;
 
-  @Column('uuid')
   @ManyToOne(() => Category)
-  @JoinColumn({ name: 'id' })
+  @JoinColumn({ name: 'category_id' })
+  category: Category;
+
+  @Column()
   category_id: string;
 
   @Column('timestamp with time zone')
@@ -32,6 +34,9 @@ class Transaction {
 
   @Column('timestamp with time zone')
   updated_at: Date;
+
+  @Column()
+  filename: string;
 }
 
 export default Transaction;
